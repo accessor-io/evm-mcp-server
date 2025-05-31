@@ -1,8 +1,8 @@
 import { normalize, namehash } from 'viem/ens';
 import { type Address, type Chain, type Hash, type TransactionReceipt } from './types.js';
-import { getClients } from './utils.js';
+import { getPublicClient, getWalletClient } from '../../../services/clients.js';
 import { mainnet } from 'viem/chains';
-import { isAddress } from 'viem';
+import { isAddress, type Log } from 'viem';
 
 // Common ABI definitions
 const RESOLVER_ABI = [
@@ -43,7 +43,7 @@ export async function getEnsTextRecord(
 ): Promise<string | null> {
   try {
     const normalizedEns = normalize(name);
-    const { publicClient } = await getClients(network);
+    const publicClient = getPublicClient(network);
     return await publicClient.getEnsText({
       name: normalizedEns,
       key,
@@ -72,13 +72,17 @@ export async function setEnsTextRecord(
 ): Promise<Hash> {
   try {
     const normalizedEns = normalize(name);
-    const { publicClient, walletClient } = await getClients(network);
+    const publicClient = getPublicClient(network);
+    const walletClient = getWalletClient(network);
     if (!walletClient.account) {
       throw new Error('No wallet account available [Error Code: SetEnsTextRecord_NoAccount_001]');
     }
     const resolverAddress = await publicClient.getEnsResolver({
       name: normalizedEns,
     });
+    if (!resolverAddress || typeof resolverAddress !== 'string' || !resolverAddress.startsWith('0x')) {
+      throw new Error(`Could not resolve ENS resolver address for ${normalizedEns}`);
+    }
     return await walletClient.writeContract({
       address: resolverAddress as `0x${string}`,
       abi: RESOLVER_ABI,
@@ -114,12 +118,13 @@ export async function setEnsAddressRecord(
         `Invalid Ethereum address: "${address}" [Error Code: SetEnsAddressRecord_InvalidInput_001]`
       );
     }
-    const { walletClient } = await getClients(network);
+    const walletClient = getWalletClient(network);
     if (!walletClient.account) {
       throw new Error('No wallet account available [Error Code: SetEnsAddressRecord_NoAccount_001]');
     }
+    const registryAddress = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as `0x${string}`;
     const result = await walletClient.writeContract({
-      address: walletClient.address,
+      address: registryAddress,
       abi: [
         {
           inputs: [
@@ -137,7 +142,7 @@ export async function setEnsAddressRecord(
       account: walletClient.account,
       chain: walletClient.chain,
     });
-    return result as TransactionReceipt;
+    return result as unknown as TransactionReceipt;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
@@ -162,15 +167,10 @@ export async function getRecentRegistrations(
   transactionHash: Hash;
 }>> {
   try {
-    const { publicClient } = await getClients(network);
-    
-    // ENS Registry contract address
-    const registryAddress = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as const;
-    
-    // Get the latest block number
+    const publicClient = getPublicClient(network);
+    const registryAddress = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as `0x${string}`;
     const latestBlock = await publicClient.getBlockNumber();
-    
-    // Query for NewOwner events
+    // Type logs as Log & args for correct property access
     const logs = await publicClient.getLogs({
       address: registryAddress,
       event: {
@@ -182,33 +182,28 @@ export async function getRecentRegistrations(
           { type: 'address', name: 'owner' }
         ]
       },
-      fromBlock: latestBlock - BigInt(10000), // Look back 10k blocks
-      toBlock: latestBlock
-    });
-
-    // Process the logs and get the most recent registrations
+      fromBlock: latestBlock - BigInt(10000),
+      toBlock: latestBlock,
+      strict: true // ensures args is always present
+    }) as Array<Log & { args: { label: string; node: string; owner: Address } }>;
+    // Filter out logs with missing or invalid blockNumber, transactionHash, or args
+    const filteredLogs = logs.filter(log => typeof log.blockNumber === 'bigint' && !!log.transactionHash && !!log.args && !!log.args.owner);
     const registrations = await Promise.all(
-      logs.slice(-count).map(async (log) => {
-        const label = log.args.label;
-        const node = log.args.node;
-        const owner = log.args.owner;
-        
-        // Get the name from the label
+      filteredLogs.slice(-count).map(async (log) => {
+        const { label, node, owner } = log.args;
         const name = await publicClient.getEnsName({
           address: owner,
           blockNumber: log.blockNumber
         });
-
         return {
           name: name || 'unknown.eth',
-          owner: owner,
-          blockNumber: log.blockNumber,
-          transactionHash: log.transactionHash
+          owner,
+          blockNumber: log.blockNumber as bigint,
+          transactionHash: log.transactionHash as Hash
         };
       })
     );
-
-    return registrations.reverse(); // Return most recent first
+    return registrations.reverse();
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
