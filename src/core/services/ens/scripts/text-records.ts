@@ -1,5 +1,6 @@
 import { normalize, namehash } from 'viem/ens';
 import { type Address, type Chain, type Hash, type TransactionReceipt } from './types.js';
+import { type Hex } from 'viem';
 import { getPublicClient, getWalletClient } from '../../../services/clients.js';
 import { mainnet } from 'viem/chains';
 import { isAddress, type Log } from 'viem';
@@ -89,7 +90,8 @@ export async function setEnsTextRecord(
   try {
     const normalizedEns = normalize(name);
     const publicClient = getPublicClient(network);
-    const walletClient = getWalletClient(network);
+    const privateKey = process.env.PRIVATE_KEY as Hex;
+    const walletClient = getWalletClient(privateKey, network);
     if (!walletClient.account) {
       throw new Error('No wallet account available [Error Code: SetEnsTextRecord_NoAccount_001]');
     }
@@ -134,7 +136,8 @@ export async function setEnsAddressRecord(
         `Invalid Ethereum address: "${address}" [Error Code: SetEnsAddressRecord_InvalidInput_001]`
       );
     }
-    const walletClient = getWalletClient(network);
+    const privateKey = process.env.PRIVATE_KEY as Hex;
+    const walletClient = getWalletClient(privateKey, network);
     if (!walletClient.account) {
       throw new Error('No wallet account available [Error Code: SetEnsAddressRecord_NoAccount_001]');
     }
