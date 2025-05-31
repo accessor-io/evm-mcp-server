@@ -1,13 +1,13 @@
 import { normalize, labelhash, namehash } from 'viem/ens';
 import { getPublicClient, getWalletClient } from './clients.js';
-import { 
-  type Address, 
-  type Chain, 
-  type Hash, 
-  type TransactionReceipt, 
-  type PublicClient, 
-  type WalletClient, 
-  type Account, 
+import {
+  type Address,
+  type Chain,
+  type Hash,
+  type TransactionReceipt,
+  type PublicClient,
+  type WalletClient,
+  type Account,
   type WriteContractParameters,
   type Hex,
   type GetEnsResolverParameters,
@@ -17,20 +17,6 @@ import {
 } from 'viem';
 import { mainnet } from 'viem/chains';
 import { isAddress } from 'viem';
-
-// ENS Registry address
-const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as const;
-
-/**
- * Utility function to get initialized clients for a network
- * @param network Network name or chain
- * @returns Object containing public and wallet clients
- */
-async function getClients(network: string | Chain = mainnet) {
-  const publicClient = getPublicClient(typeof network === 'string' ? network : undefined) as PublicClient;
-  const walletClient = await getWalletClient(typeof network === 'string' ? network : undefined) as WalletClient;
-  return { publicClient, walletClient };
-}
 
 // Common ABI definitions
 const RESOLVER_ABI = [
@@ -57,6 +43,9 @@ const RESOLVER_ABI = [
   },
 ] as const;
 
+// ENS Registry address constant
+const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as `0x${string}`;
+
 /**
  * Resolves an ENS name to an Ethereum address or returns the original input if it's already a valid address.
  * This function acts as a wrapper around viem's `getEnsAddress` functionality, providing
@@ -82,7 +71,7 @@ export async function resolveAddress(
   if (addressOrEns.includes('.')) {
     try {
       const normalizedEns = normalize(addressOrEns);
-      const { publicClient } = await getClients(network);
+      const { publicClient } = { publicClient: getPublicClient(network) };
       const address = await publicClient.getEnsAddress({
         name: normalizedEns,
       });
@@ -130,7 +119,7 @@ export async function lookupAddress(
   network: string | Chain = mainnet
 ): Promise<string | null> {
   try {
-    const { publicClient } = await getClients(network);
+    const { publicClient } = { publicClient: getPublicClient(network) };
     const ensName = await publicClient.getEnsName({
       address,
     });
@@ -163,7 +152,7 @@ export async function getEnsAvatar(
 ): Promise<string | null> {
   try {
     const normalizedEns = normalize(name);
-    const { publicClient } = await getClients(network);
+    const { publicClient } = { publicClient: getPublicClient(network) };
     const avatarUri = await publicClient.getEnsAvatar({
       name: normalizedEns,
     });
@@ -197,7 +186,7 @@ export async function getEnsResolverAddress(
 ): Promise<Address> {
   try {
     const normalizedEns = normalize(name);
-    const { publicClient } = await getClients(network);
+    const { publicClient } = { publicClient: getPublicClient(network) };
     const resolverAddress = await publicClient.getEnsResolver({
       name: normalizedEns,
     });
@@ -234,7 +223,7 @@ export async function getEnsTextRecord(
 ): Promise<string | null> {
   try {
     const normalizedEns = normalize(name);
-    const { publicClient } = await getClients(network);
+    const { publicClient } = { publicClient: getPublicClient(network) };
     const textRecord = await publicClient.getEnsText({
       name: normalizedEns,
       key,
@@ -315,7 +304,7 @@ export async function isNameAvailable(
 ): Promise<boolean> {
   try {
     const normalizedEns = normalize(name);
-    const { publicClient } = await getClients(network);
+    const { publicClient } = { publicClient: getPublicClient(network) };
     const resolverAddress = await publicClient.getEnsResolver({
       name: normalizedEns,
     });
@@ -348,7 +337,7 @@ export async function getEnsRegistrarController(
 ): Promise<Address> {
   try {
     const normalizedEns = normalize(name);
-    const { publicClient } = await getClients(network);
+    const { publicClient } = { publicClient: getPublicClient(network) };
     const controllerAddress = await publicClient.getEnsResolver({
       name: normalizedEns,
     });
@@ -381,7 +370,7 @@ export async function getEnsOwner(
 ): Promise<Address | null> {
   try {
     const normalizedEns = normalize(name);
-    const { publicClient } = await getClients(network);
+    const { publicClient } = { publicClient: getPublicClient(network) };
     const resolverAddress = await publicClient.getEnsResolver({
       name: normalizedEns,
     });
@@ -431,7 +420,7 @@ export async function getEnsExpiration(
 ): Promise<Date | null> {
   try {
     const normalizedEns = normalize(name);
-    const { publicClient } = await getClients(network);
+    const { publicClient } = { publicClient: getPublicClient(network) };
     const expiry = await publicClient.getEnsText({
       name: normalizedEns,
       key: 'expiry',
@@ -465,7 +454,7 @@ export async function getEnsContentHash(
 ): Promise<Hash | null> {
   try {
     const normalizedEns = normalize(name);
-    const { publicClient } = await getClients(network);
+    const { publicClient } = { publicClient: getPublicClient(network) };
     const contentHash = await publicClient.getEnsText({
       name: normalizedEns,
       key: 'contenthash',
@@ -501,7 +490,7 @@ export async function getEnsMultichainAddress(
 ): Promise<string | null> {
   try {
     const normalizedEns = normalize(name);
-    const { publicClient } = await getClients(network);
+    const { publicClient } = { publicClient: getPublicClient(network) };
     const address = await publicClient.getEnsText({
       name: normalizedEns,
       key: `address.${coinType}`,
@@ -539,13 +528,18 @@ export async function setEnsTextRecord(
 ): Promise<Hash> {
   try {
     const normalizedEns = normalize(name);
-    const { publicClient, walletClient } = await getClients(network);
+    const publicClient = getPublicClient(network);
+    const privateKey = process.env.PRIVATE_KEY as Hex;
+    const walletClient = getWalletClient(privateKey, network);
     if (!walletClient.account) {
       throw new Error('No wallet account available [Error Code: SetEnsTextRecord_NoAccount_001]');
     }
     const resolverAddress = await publicClient.getEnsResolver({
       name: normalizedEns,
     } as GetEnsResolverParameters);
+    if (!resolverAddress || typeof resolverAddress !== 'string' || !resolverAddress.startsWith('0x')) {
+      throw new Error(`Could not resolve ENS resolver address for ${normalizedEns}`);
+    }
     const result = await walletClient.writeContract({
       address: resolverAddress as `0x${string}`,
       abi: RESOLVER_ABI,
@@ -554,7 +548,7 @@ export async function setEnsTextRecord(
       account: walletClient.account,
       chain: walletClient.chain,
     });
-    return result;
+    return result as unknown as Hash;
   } catch (error: unknown) {
     console.error(`Error setting ENS text record "${key}" for name "${name}":`, error);
     const message = error instanceof Error ? error.message : String(error);
@@ -593,12 +587,20 @@ export async function setEnsAddressRecord(
       console.error('Error in setEnsAddressRecord:', error);
       throw error;
     }
-    const { walletClient } = await getClients(network);
+    const publicClient = getPublicClient(network);
+    const privateKey = process.env.PRIVATE_KEY as Hex;
+    const walletClient = getWalletClient(privateKey, network);
     if (!walletClient.account) {
       throw new Error('No wallet account available [Error Code: SetEnsAddressRecord_NoAccount_001]');
     }
+    const resolverAddress = await publicClient.getEnsResolver({
+      name: normalizedEns,
+    } as GetEnsResolverParameters);
+    if (!resolverAddress || typeof resolverAddress !== 'string' || !resolverAddress.startsWith('0x')) {
+      throw new Error(`Could not resolve ENS resolver address for ${normalizedEns}`);
+    }
     const result = await walletClient.writeContract({
-      address: walletClient.address,
+      address: resolverAddress as `0x${string}`,
       abi: [
         {
           inputs: [
@@ -613,9 +615,10 @@ export async function setEnsAddressRecord(
       ],
       functionName: 'setAddr',
       args: [namehash(normalizedEns), address || '0x0000000000000000000000000000000000000000'],
-      account: walletClient.account as Account,
+      account: walletClient.account,
+      chain: walletClient.chain,
     });
-    return result as TransactionReceipt;
+    return result as unknown as TransactionReceipt;
   } catch (error: unknown) {
     console.error(`Error setting ENS address record for name "${name}":`, error);
     const message = error instanceof Error ? error.message : String(error);
@@ -646,12 +649,20 @@ export async function setEnsAvatar(
 ): Promise<TransactionReceipt> {
   try {
     const normalizedEns = normalize(name);
-    const { walletClient } = await getClients(network);
+    const publicClient = getPublicClient(network);
+    const privateKey = process.env.PRIVATE_KEY as Hex;
+    const walletClient = getWalletClient(privateKey, network);
     if (!walletClient.account) {
       throw new Error('No wallet account available [Error Code: SetEnsAvatar_NoAccount_001]');
     }
+    const resolverAddress = await publicClient.getEnsResolver({
+      name: normalizedEns,
+    } as GetEnsResolverParameters);
+    if (!resolverAddress || typeof resolverAddress !== 'string' || !resolverAddress.startsWith('0x')) {
+      throw new Error(`Could not resolve ENS resolver address for ${normalizedEns}`);
+    }
     const result = await walletClient.writeContract({
-      address: walletClient.address,
+      address: resolverAddress as `0x${string}`,
       abi: [
         {
           inputs: [
@@ -667,9 +678,10 @@ export async function setEnsAvatar(
       ],
       functionName: 'setText',
       args: [namehash(normalizedEns), 'avatar', avatarUri || ''],
-      account: walletClient.account as Account,
+      account: walletClient.account,
+      chain: walletClient.chain,
     });
-    return result as TransactionReceipt;
+    return result as unknown as TransactionReceipt;
   } catch (error: unknown) {
     console.error(`Error setting ENS avatar for name "${name}":`, error);
     const message = error instanceof Error ? error.message : String(error);
@@ -711,12 +723,13 @@ export async function createEnsSubdomain(
       console.error('Error in createEnsSubdomain:', error);
       throw error;
     }
-    const { walletClient } = await getClients(network);
+    const privateKey = process.env.PRIVATE_KEY as Hex;
+    const walletClient = getWalletClient(privateKey, network);
     if (!walletClient.account) {
       throw new Error('No wallet account available [Error Code: CreateEnsSubdomain_NoAccount_001]');
     }
     const result = await walletClient.writeContract({
-      address: walletClient.address,
+      address: ENS_REGISTRY_ADDRESS,
       abi: [
         {
           inputs: [
@@ -732,9 +745,10 @@ export async function createEnsSubdomain(
       ],
       functionName: 'setSubnodeOwner',
       args: [namehash(normalizedParent), labelhash(normalizedLabel), owner],
-      account: walletClient.account as Account,
+      account: walletClient.account,
+      chain: walletClient.chain,
     });
-    return result as TransactionReceipt;
+    return result as unknown as TransactionReceipt;
   } catch (error: unknown) {
     console.error(`Error creating subdomain "${label}" under "${parentName}":`, error);
     const message = error instanceof Error ? error.message : String(error);
@@ -773,12 +787,13 @@ export async function setEnsOwner(
       console.error('Error in setEnsOwner:', error);
       throw error;
     }
-    const { walletClient } = await getClients(network);
+    const privateKey = process.env.PRIVATE_KEY as Hex;
+    const walletClient = getWalletClient(privateKey, network);
     if (!walletClient.account) {
       throw new Error('No wallet account available [Error Code: SetEnsOwner_NoAccount_001]');
     }
     const result = await walletClient.writeContract({
-      address: walletClient.address,
+      address: ENS_REGISTRY_ADDRESS,
       abi: [
         {
           inputs: [
@@ -793,9 +808,10 @@ export async function setEnsOwner(
       ],
       functionName: 'setOwner',
       args: [namehash(normalizedEns), owner],
-      account: walletClient.account as Account,
+      account: walletClient.account,
+      chain: walletClient.chain,
     });
-    return result as TransactionReceipt;
+    return result as unknown as TransactionReceipt;
   } catch (error: unknown) {
     console.error(`Error setting owner for ENS name "${name}":`, error);
     const message = error instanceof Error ? error.message : String(error);
@@ -877,8 +893,8 @@ export async function getEnsOwnershipHistory(
   network: string | Chain = mainnet
 ): Promise<EnsOwnershipRecord[]> {
   try {
-    const { publicClient } = await getClients(network);
-    const registryAddress = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as const;
+    const { publicClient } = { publicClient: getPublicClient(network) };
+    const registryAddress = ENS_REGISTRY_ADDRESS;
     
     // Get all Transfer events for this name
     const logs = await publicClient.getLogs({
@@ -932,7 +948,7 @@ export async function getEnsAddressHistory(
   network: string | Chain = mainnet
 ): Promise<EnsAddressRecord[]> {
   try {
-    const { publicClient } = await getClients(network);
+    const { publicClient } = { publicClient: getPublicClient(network) };
     const resolverAddress = await publicClient.getEnsResolver({
       name: name,
     });
@@ -1027,9 +1043,8 @@ export async function getEnsSubdomains(
   network: string | Chain = mainnet
 ): Promise<string[]> {
   try {
-    const { publicClient } = await getClients(network);
+    const publicClient = getPublicClient(network);
     const registryAddress = ENS_REGISTRY_ADDRESS;
-    
     const logs = await publicClient.getLogs({
       address: registryAddress,
       event: {
@@ -1046,10 +1061,15 @@ export async function getEnsSubdomains(
       },
       fromBlock: 0n,
     });
-    
-    return logs
-      .filter((log: Log) => log.args.label !== undefined)
-      .map((log: Log) => labelhash(log.args.label as string));
+    // Try to decode label from log.args if present, otherwise from topics
+    return logs.map((log: any) => {
+      if (log.args && log.args.label) {
+        return log.args.label;
+      } else if (log.topics && log.topics[2]) {
+        return log.topics[2];
+      }
+      return '';
+    });
   } catch (error: unknown) {
     console.error(`Error retrieving subdomains for ENS name "${name}":`, error);
     const message = error instanceof Error ? error.message : String(error);
@@ -1085,12 +1105,13 @@ export async function setSubdomainResolver(
       console.error('Error in setSubdomainResolver:', error);
       throw error;
     }
-    const { walletClient } = await getClients(network);
+    const privateKey = process.env.PRIVATE_KEY as Hex;
+    const walletClient = getWalletClient(privateKey, network);
     if (!walletClient.account) {
       throw new Error('No wallet account available [Error Code: SetSubdomainResolver_NoAccount_001]');
     }
     const result = await walletClient.writeContract({
-      address: walletClient.address,
+      address: ENS_REGISTRY_ADDRESS,
       abi: [
         {
           inputs: [
@@ -1106,9 +1127,10 @@ export async function setSubdomainResolver(
       ],
       functionName: 'setSubnodeResolver',
       args: [namehash(normalizedParent), labelhash(normalizedLabel), resolver],
-      account: walletClient.account as Account,
+      account: walletClient.account,
+      chain: walletClient.chain,
     });
-    return result as TransactionReceipt;
+    return result as unknown as TransactionReceipt;
   } catch (error: unknown) {
     console.error(`Error setting subdomain resolver for "${label}" under "${parentName}":`, error);
     const message = error instanceof Error ? error.message : String(error);
@@ -1132,28 +1154,13 @@ export async function wrapEnsName(
 ): Promise<TransactionReceipt> {
   try {
     const normalizedEns = normalize(name);
-    const { walletClient } = await getClients(network);
+    const privateKey = process.env.PRIVATE_KEY as Hex;
+    const walletClient = getWalletClient(privateKey, network);
     if (!walletClient.account) {
       throw new Error('No wallet account available [Error Code: WrapEnsName_NoAccount_001]');
     }
-    const result = await walletClient.writeContract({
-      address: walletClient.address,
-      abi: [
-        {
-          inputs: [
-            { name: 'node', type: 'bytes32' },
-          ],
-          name: 'wrap',
-          outputs: [{ name: 'tokenId', type: 'uint256' }],
-          stateMutability: 'nonpayable',
-          type: 'function',
-        },
-      ],
-      functionName: 'wrap',
-      args: [namehash(normalizedEns)],
-      account: walletClient.account as Account,
-    });
-    return result as TransactionReceipt;
+    // You need to provide the correct wrapper contract address for wrapping
+    throw new Error('wrapEnsName: Wrapper contract address and ABI must be specified.');
   } catch (error: unknown) {
     console.error(`Error wrapping ENS name "${name}":`, error);
     const message = error instanceof Error ? error.message : String(error);
@@ -1177,28 +1184,13 @@ export async function unwrapEnsName(
 ): Promise<TransactionReceipt> {
   try {
     const normalizedEns = normalize(name);
-    const { walletClient } = await getClients(network);
+    const privateKey = process.env.PRIVATE_KEY as Hex;
+    const walletClient = getWalletClient(privateKey, network);
     if (!walletClient.account) {
       throw new Error('No wallet account available [Error Code: UnwrapEnsName_NoAccount_001]');
     }
-    const result = await walletClient.writeContract({
-      address: walletClient.address,
-      abi: [
-        {
-          inputs: [
-            { name: 'node', type: 'bytes32' },
-          ],
-          name: 'unwrap',
-          outputs: [],
-          stateMutability: 'nonpayable',
-          type: 'function',
-        },
-      ],
-      functionName: 'unwrap',
-      args: [namehash(normalizedEns)],
-      account: walletClient.account as Account,
-    });
-    return result as TransactionReceipt;
+    // You need to provide the correct wrapper contract address for unwrapping
+    throw new Error('unwrapEnsName: Wrapper contract address and ABI must be specified.');
   } catch (error: unknown) {
     console.error(`Error unwrapping ENS name "${name}":`, error);
     const message = error instanceof Error ? error.message : String(error);
@@ -1226,35 +1218,13 @@ export async function getWrappedNameDetails(
 }> {
   try {
     const normalizedEns = normalize(name);
-    const { walletClient } = await getClients(network);
+    const privateKey = process.env.PRIVATE_KEY as Hex;
+    const walletClient = getWalletClient(privateKey, network);
     if (!walletClient.account) {
       throw new Error('No wallet account available [Error Code: GetWrappedNameDetails_NoAccount_001]');
     }
-    const result = await walletClient.readContract({
-      address: walletClient.address,
-      abi: [
-        {
-          inputs: [
-            { name: 'node', type: 'bytes32' },
-          ],
-          name: 'wrappedNameDetails',
-          outputs: [
-            { name: 'tokenId', type: 'uint256' },
-            { name: 'owner', type: 'address' },
-            { name: 'expiry', type: 'uint256' },
-          ],
-          stateMutability: 'view',
-          type: 'function',
-        },
-      ],
-      functionName: 'wrappedNameDetails',
-      args: [namehash(normalizedEns)],
-    });
-    return {
-      tokenId: result[0] as bigint,
-      owner: result[1] as Address,
-      expiry: Number(result[2])
-    };
+    // You need to provide the correct wrapper contract address and ABI for reading details
+    throw new Error('getWrappedNameDetails: Wrapper contract address and ABI must be specified.');
   } catch (error: unknown) {
     console.error(`Error getting wrapped name details for ENS name "${name}":`, error);
     const message = error instanceof Error ? error.message : String(error);
@@ -1265,40 +1235,3 @@ export async function getWrappedNameDetails(
     throw newError;
   }
 }
-
-/**
- * Set content hash (IPFS, Swarm, etc.)
- * @param name The ENS name to update
- * @param protocol The content protocol (e.g., 'ipfs', 'swarm', 'onion', 'skynet')
- * @param hash The content hash
- * @param network The target blockchain network
- * @returns A Promise that resolves to the transaction hash (`WriteContractResult`) of the operation
- */
-import { normalize, labelhash, namehash } from 'viem/ens';
-import { getPublicClient, getWalletClient } from './clients.js';
-import { 
-  type Address, 
-  type Chain, 
-  type Hash, 
-  type TransactionReceipt, 
-  type PublicClient, 
-  type WalletClient, 
-  type Account, 
-  type WriteContractParameters,
-  type Hex,
-  type GetEnsResolverParameters,
-  type Log,
-  type WriteContractReturnType,
-  type GetContractReturnType
-} from 'viem';
-import { mainnet } from 'viem/chains';
-import { isAddress } from 'viem';
-
-// ENS Registry address
-const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as const;
-
-/**
- * Utility function to get initialized clients for a network
- * @param network Network name or chain
- * @returns Object containing public and wallet clients
- */
