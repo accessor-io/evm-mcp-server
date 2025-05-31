@@ -29,6 +29,22 @@ const RESOLVER_ABI = [
   },
 ] as const;
 
+// ENS .eth Registrar Controller address and NameRegistered event ABI
+const ETH_REGISTRAR_CONTROLLER_ADDRESS = '0x283Af0B28c62C092C9727F1Ee09c02CA627EB7F5' as `0x${string}`;
+const NAME_REGISTERED_EVENT_ABI = [
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'string', name: 'name', type: 'string' },
+      { indexed: true, internalType: 'address', name: 'owner', type: 'address' },
+      { indexed: false, internalType: 'uint256', name: 'cost', type: 'uint256' },
+      { indexed: false, internalType: 'uint256', name: 'expires', type: 'uint256' }
+    ],
+    name: 'NameRegistered',
+    type: 'event'
+  }
+] as const;
+
 /**
  * Retrieves a specific text record associated with an ENS name.
  * @param name The ENS name to query.
@@ -165,44 +181,31 @@ export async function getRecentRegistrations(
   owner: Address;
   blockNumber: bigint;
   transactionHash: Hash;
+  cost: bigint;
+  expires: bigint;
 }>> {
   try {
     const publicClient = getPublicClient(network);
-    const registryAddress = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as `0x${string}`;
     const latestBlock = await publicClient.getBlockNumber();
-    // Type logs as Log & args for correct property access
     const logs = await publicClient.getLogs({
-      address: registryAddress,
-      event: {
-        type: 'event',
-        name: 'NewOwner',
-        inputs: [
-          { type: 'bytes32', name: 'node', indexed: true },
-          { type: 'bytes32', name: 'label', indexed: true },
-          { type: 'address', name: 'owner' }
-        ]
-      },
+      address: ETH_REGISTRAR_CONTROLLER_ADDRESS,
+      event: NAME_REGISTERED_EVENT_ABI[0],
       fromBlock: latestBlock - BigInt(10000),
       toBlock: latestBlock,
-      strict: true // ensures args is always present
-    }) as Array<Log & { args: { label: string; node: string; owner: Address } }>;
-    // Filter out logs with missing or invalid blockNumber, transactionHash, or args
-    const filteredLogs = logs.filter(log => typeof log.blockNumber === 'bigint' && !!log.transactionHash && !!log.args && !!log.args.owner);
-    const registrations = await Promise.all(
-      filteredLogs.slice(-count).map(async (log) => {
-        const { label, node, owner } = log.args;
-        const name = await publicClient.getEnsName({
-          address: owner,
-          blockNumber: log.blockNumber
-        });
-        return {
-          name: name || 'unknown.eth',
-          owner,
-          blockNumber: log.blockNumber as bigint,
-          transactionHash: log.transactionHash as Hash
-        };
-      })
-    );
+      strict: true
+    }) as Array<Log & { args: { name: string; owner: Address; cost: bigint; expires: bigint } }>;
+    const filteredLogs = logs.filter(log => typeof log.blockNumber === 'bigint' && !!log.transactionHash && !!log.args && !!log.args.owner && !!log.args.name);
+    const registrations = filteredLogs.slice(-count).map((log) => {
+      const { name, owner, cost, expires } = log.args;
+      return {
+        name,
+        owner,
+        blockNumber: log.blockNumber as bigint,
+        transactionHash: log.transactionHash as Hash,
+        cost,
+        expires
+      };
+    });
     return registrations.reverse();
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
